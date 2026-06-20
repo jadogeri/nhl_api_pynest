@@ -37,7 +37,20 @@
   <li><a href="#7-usage">7. Usage</a></li>
   <li><a href="#8-auto-seeding">8. Auto-Seeding</a></li>
   <li><a href="#9-bugs-fixed-and-lessons-learned">9. Bugs Fixed &amp; Lessons Learned</a></li>
-  <li><a href="#10-license">10. License</a></li>
+  <li><a href="#10-testing">10. Testing</a>
+    <ul>
+      <li><a href="#101-test-structure">10.1 Test Structure</a></li>
+      <li><a href="#102-running-tests">10.2 Running Tests</a></li>
+      <li><a href="#103-database-isolation">10.3 Database Isolation</a></li>
+    </ul>
+  </li>
+  <li><a href="#11-ci--github-actions">11. CI / GitHub Actions</a>
+    <ul>
+      <li><a href="#111-workflow-overview">11.1 Workflow Overview</a></li>
+      <li><a href="#112-running-the-same-checks-locally">11.2 Running the Same Checks Locally</a></li>
+    </ul>
+  </li>
+  <li><a href="#12-license">12. License</a></li>
 </ul>
 
 ---
@@ -338,8 +351,141 @@ python main.py
 
 ---
 
-<a id="10-license"></a>
-## **10. License**
+<a id="10-testing"></a>
+## **10. Testing**
+
+<a id="101-test-structure"></a>
+### **10.1 Test Structure**
+
+The test suite is organised into three layers, each exercising a different scope of the stack:
+
+```
+tests/
+├── conftest.py              # Shared fixtures (in-memory engine, sample data)
+│                            # Also sets DATABASE_URL before any imports
+├── unit/
+│   ├── test_team_model.py       # Pydantic schema validation
+│   ├── test_team_entity.py      # SQLAlchemy ORM model attributes
+│   ├── test_team_repository.py  # Repository CRUD (mocked session)
+│   ├── test_team_service.py     # Service logic (mocked repository)
+│   └── test_team_controller.py  # Controller dispatch (mocked service)
+├── integration/
+│   ├── test_team_repository_integration.py  # Repository ↔ in-memory SQLite
+│   └── test_team_service_integration.py     # Service ↔ real repository ↔ in-memory SQLite
+└── e2e/
+    ├── conftest.py          # TestClient fixture + autouse truncate before each test
+    └── test_teams_e2e.py    # Full HTTP round-trips through every endpoint
+```
+
+| Layer | Scope | Database |
+|-------|-------|----------|
+| Unit | Single class, all collaborators mocked | None |
+| Integration | Two or more real classes together | In-memory SQLite (`sqlite:///:memory:`) |
+| E2E | Full HTTP stack via `TestClient` | File-based SQLite (`test_nhl.db`) |
+
+<a id="102-running-tests"></a>
+### **10.2 Running Tests**
+
+```bash
+# Install dev dependencies (includes pytest, pytest-mock, httpx)
+pip install -r requirements-dev.txt
+
+# Run the full suite
+pytest
+
+# Run a single layer
+pytest tests/unit/
+pytest tests/integration/
+pytest tests/e2e/
+
+# Run with verbose output and short tracebacks (already set in pytest.ini)
+pytest -v --tb=short
+
+# Run a specific test file
+pytest tests/unit/test_team_service.py
+
+# Run a specific test by name
+pytest tests/e2e/test_teams_e2e.py::TestCreateTeam::test_create_team_success
+```
+
+<a id="103-database-isolation"></a>
+### **10.3 Database Isolation**
+
+The test suite never touches `national_hockey_league.db` (the development database).
+
+`tests/conftest.py` calls `os.environ.setdefault("DATABASE_URL", "sqlite:///./test_nhl.db")` before any application module is imported. Because `src/config/database.py` reads `DATABASE_URL` at import time to create the engine, this single line redirects all e2e traffic to a dedicated `test_nhl.db` file.
+
+- `setdefault` means: if you have already exported `DATABASE_URL` in your shell (e.g. on CI pointing at a real database), it is left unchanged.
+- Unit and integration tests create their own in-memory engine directly and never go through the app engine at all.
+- The e2e `autouse` fixture calls `POST /teams/truncate` before every test, so each test starts with an empty table.
+
+---
+
+<a id="11-ci--github-actions"></a>
+## **11. CI / GitHub Actions**
+
+[![CI](https://github.com/jadogeri/nhl_api_pynest/actions/workflows/ci.yml/badge.svg)](https://github.com/jadogeri/nhl_api_pynest/actions/workflows/ci.yml)
+
+<a id="111-workflow-overview"></a>
+### **11.1 Workflow Overview**
+
+The workflow file lives at `.github/workflows/ci.yml` and runs on every push or pull request to `main` and `develop`.
+
+```
+push / pull_request
+        │
+        ▼
+┌──────────────────────────────────┐
+│  job: test  (ubuntu-latest)      │
+│  ─────────────────────────────── │
+│  1. Checkout                     │
+│  2. Python 3.11 + pip cache      │
+│  3. pip install -r               │
+│     requirements-dev.txt         │
+│  4. pytest tests/unit/           │
+│  5. pytest tests/integration/    │
+│  6. pytest tests/e2e/            │
+│     (DATABASE_URL=test_nhl.db)   │
+└──────────────┬───────────────────┘
+               │ needs: test
+               ▼
+┌──────────────────────────────────┐
+│  job: build  (ubuntu-latest)     │
+│  ─────────────────────────────── │
+│  1. Checkout                     │
+│  2. Python 3.11 + pip cache      │
+│  3. pip install -r               │
+│     requirements.txt             │
+│  4. python -c                    │
+│     "from src.app_module import  │
+│      http_server; print('OK')"   │
+└──────────────────────────────────┘
+```
+
+The `build` job only runs when `test` passes — a failing test suite blocks the build check.
+
+<a id="112-running-the-same-checks-locally"></a>
+### **11.2 Running the Same Checks Locally**
+
+```bash
+# Exactly what CI runs for the test job
+pip install -r requirements-dev.txt
+pytest tests/unit/ -v --tb=short
+pytest tests/integration/ -v --tb=short
+DATABASE_URL=sqlite:///./test_nhl.db pytest tests/e2e/ -v --tb=short
+
+# Windows PowerShell equivalent for the e2e step
+$env:DATABASE_URL="sqlite:///./test_nhl.db"; pytest tests/e2e/ -v --tb=short
+
+# Exactly what CI runs for the build job
+pip install -r requirements.txt
+python -c "from src.app_module import http_server; print('App loaded OK')"
+```
+
+---
+
+<a id="12-license"></a>
+## **12. License**
 
 MIT — see [LICENSE.md](./LICENSE.md).
 
