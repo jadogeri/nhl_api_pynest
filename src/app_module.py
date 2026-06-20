@@ -1,10 +1,8 @@
 from nest.core import PyNestFactory, Module
-        
-from .app_controller import AppController
-from .app_service import AppService
+from src.modules.team.team_module import TeamModule
 
 
-@Module(imports=[], controllers=[AppController], providers=[AppService])
+@Module(imports=[TeamModule], controllers=[], providers=[])
 class AppModule:
     pass
 
@@ -16,7 +14,4 @@ app = PyNestFactory.create(
     version="1.0.0",
     debug=True,
 )
-
 http_server = app.get_server()
-
-                
