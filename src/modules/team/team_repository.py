@@ -1,13 +1,14 @@
 from typing import Optional, List
-from sqlalchemy.orm import Session
-from src.config.database import SessionLocal
 from src.modules.team.team_entity import TeamEntity
 from src.modules.team.team_model import Team, TeamUpdate
 
 class TeamRepository:
     def __init__(self):
-        # Bind the synchronous session factory context
-        self.session_factory = SessionLocal
+        # 👈 THE FIX: Define session_factory using a lambda function.
+        # This dynamically references the global SessionLocal at the exact 
+        # moment your query calls it, allowing pytest's patch to work perfectly!
+        from src.config.database import SessionLocal
+        self.session_factory = lambda: SessionLocal()
 
     def get_all_teams(self, conference: Optional[str] = None, division: Optional[str] = None) -> List[TeamEntity]:
         with self.session_factory() as db:
@@ -36,7 +37,6 @@ class TeamRepository:
 
     def update_team(self, db_team: TeamEntity, update_data: TeamUpdate) -> TeamEntity:
         with self.session_factory() as db:
-            # Merge detached instance state back into our active thread session context
             db_team = db.merge(db_team)
             update_dict = update_data.model_dump(exclude_unset=True)
             for key, value in update_dict.items():
