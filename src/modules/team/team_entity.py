@@ -1,14 +1,15 @@
-from sqlalchemy import Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Column, Integer, String
 from src.config.database import Base
 
 class TeamEntity(Base):
     __tablename__ = "teams"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    city: Mapped[str] = mapped_column(String, nullable=False)
-    state: Mapped[str] = mapped_column(String, nullable=False)
-    conference: Mapped[str] = mapped_column(String, nullable=False)
-    division: Mapped[str] = mapped_column(String, nullable=False)
-    stadium: Mapped[str] = mapped_column(String, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    city = Column(String, nullable=False)
+    state = Column(String, nullable=True)       # 👈 Changed nullable to True
+    conference = Column(String, nullable=False)
+    division = Column(String, nullable=False)
+    stadium = Column(String, nullable=True)     # 👈 Changed nullable to True
+    def __repr__(self):
+        return f"<TeamEntity(id={self.id}, name='{self.name}', city='{self.city}', state='{self.state}', conference='{self.conference}', division='{self.division}', stadium='{self.stadium}')>"

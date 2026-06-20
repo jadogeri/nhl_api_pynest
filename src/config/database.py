@@ -1,15 +1,18 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./national_hockey_league.db")
+# 👈 Changed driver to standard sqlite (no aiosqlite or greenlet needed)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./national_hockey_league.db")
 
-engine = create_async_engine(DATABASE_URL, future=True, echo=False)
-AsyncSessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-class Base(DeclarativeBase):
-    pass
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+# Factory function helper to get a database thread context
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
