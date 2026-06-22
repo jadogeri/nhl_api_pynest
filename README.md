@@ -4,6 +4,14 @@
 **Author:** Joseph Adogeri <br/>
 **Date:** June 2026
 
+<div align="center">
+  <img src="https://pythonnest.github.io/PyNest/imgs/pynest-logo.png" alt="PyNest Logo" width="400">
+</div>
+
+---
+
+## Description
+
 > Browse, manage, and seed all 30 NHL teams — built with PyNest, FastAPI, and SQLAlchemy.
 
 ---
